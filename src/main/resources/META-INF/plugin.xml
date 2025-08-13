@@ -1,0 +1,50 @@
+<idea-plugin>
+    <id>com.hongyan.dubbo-invoke</id>
+    <name>Dubbo Invoke Generator</name>
+    <vendor email="hongyan789@example.com" url="https://github.com/HongYan789">HongYan</vendor>
+
+    <description><![CDATA[
+    一个现代化的IntelliJ IDEA插件，用于从Java接口方法生成Dubbo invoke命令。
+    
+    功能特性：
+    • 智能命令生成：右键点击Java方法即可生成Dubbo invoke命令
+    • 快捷键生成：使用 Ctrl+Alt+D 快速生成命令到剪切板
+    • 一键复制：快速复制生成的命令到剪贴板
+    • 智能解析：自动解析方法签名、参数和返回类型
+    • 类型支持：支持多种Java数据类型的示例值生成
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Add your extensions here -->
+    </extensions>
+
+    <actions>
+        <!-- Dubbo Invoke Action -->
+        <action id="DubboInvoke.GenerateCommand" 
+                class="com.hongyan.dubboinvoke.action.DubboInvokeAction"
+                text="Generate Dubbo Invoke Command"
+                description="Generate Dubbo invoke command for Java method">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt D"/>
+        </action>
+        
+        <!-- Quick Copy Action -->
+        <action id="DubboInvoke.QuickCopy" 
+                class="com.hongyan.dubboinvoke.action.QuickCopyAction"
+                text="Quick Copy Dubbo Command"
+                description="Quickly generate and copy Dubbo invoke command to clipboard">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt I"/>
+        </action>
+        
+        <!-- Config Action -->
+        <action id="DubboInvoke.Config" 
+                class="com.hongyan.dubboinvoke.action.ConfigAction"
+                text="Dubbo Invoke Settings"
+                description="Configure Dubbo invoke settings">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
