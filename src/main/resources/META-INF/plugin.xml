@@ -4,14 +4,14 @@
     <vendor email="hongyan789@example.com" url="https://github.com/HongYan789">HongYan</vendor>
 
     <description><![CDATA[
-    一个现代化的IntelliJ IDEA插件，用于从Java接口方法生成Dubbo invoke命令。
+    A modern IntelliJ IDEA plugin for generating Dubbo invoke commands from Java interface methods.
     
-    功能特性：
-    • 智能命令生成：右键点击Java方法即可生成Dubbo invoke命令
-    • 快捷键生成：使用 Ctrl+Alt+D 快速生成命令到剪切板
-    • 一键复制：快速复制生成的命令到剪贴板
-    • 智能解析：自动解析方法签名、参数和返回类型
-    • 类型支持：支持多种Java数据类型的示例值生成
+    Features:
+    • Smart command generation: Right-click on Java methods to generate Dubbo invoke commands
+    • Keyboard shortcuts: Use Ctrl+Alt+D to quickly generate commands to clipboard
+    • One-click copy: Quickly copy generated commands to clipboard
+    • Intelligent parsing: Automatically parse method signatures, parameters and return types
+    • Type support: Support for generating example values for various Java data types
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

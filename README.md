@@ -1,18 +1,17 @@
 # Dubbo Invoke Plugin for IntelliJ IDEA
 
 <!-- Plugin description -->
-一个用于IntelliJ IDEA的Dubbo调用命令生成插件，可以快速为Java方法生成Dubbo invoke命令。
+A modern IntelliJ IDEA plugin for generating Dubbo invoke commands from Java interface methods. This plugin helps developers quickly generate and execute Dubbo service calls with intelligent parameter parsing and flexible configuration options.
 
-## 功能特性
+## Features
 
-- 🚀 **快速生成**: 在Java方法上右键或使用快捷键快速生成Dubbo invoke命令
-- 📋 **一键复制**: 生成的命令可以一键复制到剪切板
-- ⚙️ **灵活配置**: 支持配置注册中心地址、应用名称、超时时间等参数
-- 🔧 **泛化调用**: 支持生成泛化调用和直接调用两种模式
-- 💡 **智能参数**: 自动生成示例参数值，支持基本类型和复杂对象
-- 📝 **详细注释**: 可选择生成带注释的详细命令
-- 🎯 **完整类型显示**: 方法签名显示完整的包路径，包括返回类型和参数类型的完整限定名
-- 📊 **方法信息展示**: 详细显示方法的返回类型、参数列表和完整签名信息
+- 🚀 **Quick Generation**: Right-click on Java methods or use keyboard shortcuts to generate Dubbo invoke commands
+- 📋 **One-Click Copy**: Generated commands can be copied to clipboard with a single click
+- ⚙️ **Flexible Configuration**: Configure registry address, application name, timeout and other parameters
+- 🔧 **Generic Invocation**: Support both generic invocation and direct invocation modes
+- 💡 **Smart Parameters**: Automatically generate example parameter values for basic types and complex objects
+- 🎯 **Complete Type Display**: Method signatures show full package paths including return types and parameter types
+- 📊 **Method Information**: Detailed display of method return types, parameter lists and complete signature information
 <!-- Plugin description end -->
 
 ## 安装方法
