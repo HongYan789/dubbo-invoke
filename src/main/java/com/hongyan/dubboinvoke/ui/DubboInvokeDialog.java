@@ -15,6 +15,7 @@ import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
+import java.util.List;
 
 /**
  * Dubbo Invoke对话框
@@ -68,20 +69,78 @@ public class DubboInvokeDialog extends DialogWrapper {
         methodInfoArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         methodInfoArea.setBackground(getContentPane().getBackground());
         
-        String methodSignature = DubboCommandGenerator.generateMethodSignature(methodInfo);
-        String methodInfoText = String.format(
-            "Class: %s\nMethod: %s\nSignature: %s",
-            methodInfo.getClassName(),
-            methodInfo.getMethodName(),
-            methodSignature
-        );
+        // 生成详细的方法信息
+        String methodInfoText = generateDetailedMethodInfo(methodInfo);
         methodInfoArea.setText(methodInfoText);
-        methodInfoArea.setRows(3);
+        methodInfoArea.setRows(6); // 增加行数以显示更多信息
 
         JBScrollPane scrollPane = new JBScrollPane(methodInfoArea);
         panel.add(scrollPane, BorderLayout.CENTER);
 
         return panel;
+    }
+    
+    /**
+     * 生成详细的方法信息
+     */
+    private String generateDetailedMethodInfo(JavaMethodParser.MethodInfo methodInfo) {
+        StringBuilder info = new StringBuilder();
+        
+        // 类名
+        info.append("类名 (Class): ").append(methodInfo.getClassName()).append("\n");
+        
+        // 方法名
+        info.append("方法名 (Method): ").append(methodInfo.getMethodName()).append("\n");
+        
+        // 返回类型
+        info.append("返回类型 (Return Type): ").append(methodInfo.getReturnType()).append("\n");
+        
+        // 方法全路径 (使用完整类型名称的Signature)
+        String signature = generateFullMethodSignature(methodInfo);
+        info.append("方法全路径 (Full Path): ").append(signature).append("\n");
+        
+        // 参数信息
+        info.append("参数 (Parameters): ");
+        if (methodInfo.getParameters().isEmpty()) {
+            info.append("无参数");
+        } else {
+            info.append("\n");
+            for (int i = 0; i < methodInfo.getParameters().size(); i++) {
+                JavaMethodParser.ParameterInfo param = methodInfo.getParameters().get(i);
+                info.append("  ").append(i + 1).append(". ")
+                    .append(param.getType()).append(" ").append(param.getName()).append("\n");
+            }
+            // 移除最后一个换行符
+            info.setLength(info.length() - 1);
+        }
+        
+        return info.toString();
+    }
+
+    /**
+     * 生成包含完整类型名称的方法签名
+     */
+    private String generateFullMethodSignature(JavaMethodParser.MethodInfo methodInfo) {
+        StringBuilder signature = new StringBuilder();
+        
+        // 返回类型（完整类型名称）
+        signature.append(methodInfo.getReturnType()).append(" ");
+        
+        // 方法名
+        signature.append(methodInfo.getMethodName()).append("(");
+        
+        // 参数（完整类型名称）
+        List<JavaMethodParser.ParameterInfo> parameters = methodInfo.getParameters();
+        if (!parameters.isEmpty()) {
+            String paramString = parameters.stream()
+                    .map(param -> param.getType() + " " + param.getName())
+                    .collect(java.util.stream.Collectors.joining(", "));
+            signature.append(paramString);
+        }
+        
+        signature.append(")");
+        
+        return signature.toString();
     }
 
     private JPanel createCommandPanel() {
