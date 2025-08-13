@@ -37,7 +37,15 @@ public class TypeResolver {
             return shortTypeName;
         }
         
-        // 尝试从当前类的import语句中查找
+        // 1. 优先查找当前类的内部类
+        if (contextClass != null) {
+            String innerClassType = findInnerClass(shortTypeName, contextClass);
+            if (innerClassType != null) {
+                return innerClassType;
+            }
+        }
+        
+        // 2. 尝试从当前类的import语句中查找
         if (contextClass != null) {
             String fullTypeFromImports = findTypeInImports(shortTypeName, contextClass);
             if (fullTypeFromImports != null) {
@@ -45,7 +53,7 @@ public class TypeResolver {
             }
         }
         
-        // 尝试在项目中搜索
+        // 3. 尝试在项目中搜索
         if (project != null) {
             String fullTypeFromProject = findTypeInProject(shortTypeName, project);
             if (fullTypeFromProject != null) {
@@ -53,8 +61,33 @@ public class TypeResolver {
             }
         }
         
-        // 如果都找不到，返回原始类型名
+        // 4. 如果都找不到，返回原始类型名
         return shortTypeName;
+    }
+    
+    /**
+     * 查找内部类
+     */
+    @Nullable
+    private static String findInnerClass(@NotNull String shortTypeName, @NotNull PsiClass contextClass) {
+        // 查找当前类的内部类
+        PsiClass[] innerClasses = contextClass.getInnerClasses();
+        for (PsiClass innerClass : innerClasses) {
+            if (shortTypeName.equals(innerClass.getName())) {
+                String qualifiedName = innerClass.getQualifiedName();
+                if (qualifiedName != null) {
+                    return qualifiedName;
+                }
+            }
+        }
+        
+        // 递归查找外部类的内部类
+        PsiClass containingClass = contextClass.getContainingClass();
+        if (containingClass != null) {
+            return findInnerClass(shortTypeName, containingClass);
+        }
+        
+        return null;
     }
     
     /**

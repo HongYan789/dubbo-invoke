@@ -73,7 +73,7 @@ public class JavaClassFieldParser {
                     
                     String fieldName = field.getName();
                     String fieldType = getFieldType(field);
-                    String exampleValue = generateExampleValueWithProject(fieldType, project);
+                    String exampleValue = generateExampleValueWithProject(fieldType, project, psiClass);
                     
                     System.out.println("[DEBUG] Adding field: " + fieldName + " (" + fieldType + ") = " + exampleValue);
                     fields.add(new FieldInfo(fieldName, fieldType, exampleValue));
@@ -150,10 +150,18 @@ public class JavaClassFieldParser {
     }
     
     /**
-     * 生成示例值（带Project参数，支持递归解析）
+     * 根据字段类型生成示例值（带项目上下文）
      */
     @NotNull
     private static String generateExampleValueWithProject(@NotNull String fieldType, @Nullable Project project) {
+        return generateExampleValueWithProject(fieldType, project, null);
+    }
+    
+    /**
+     * 根据字段类型生成示例值（带项目上下文和上下文类）
+     */
+    @NotNull
+    private static String generateExampleValueWithProject(@NotNull String fieldType, @Nullable Project project, @Nullable PsiClass contextClass) {
         switch (fieldType) {
             case "java.lang.String":
             case "String":
@@ -192,14 +200,14 @@ public class JavaClassFieldParser {
                 return "'a'";
             default:
                 if (fieldType.startsWith("java.util.List") || fieldType.contains("List")) {
-                    return "[]";
+                    return generateListValue(fieldType, project, contextClass);
                 } else if (fieldType.startsWith("java.util.Map") || fieldType.contains("Map")) {
                     return "{}";
                 } else if (fieldType.endsWith("[]")) {
                     return "[]";
                 } else {
                     // 对于复杂对象类型，尝试递归解析其字段
-                    return generateComplexObjectValue(fieldType, project);
+                    return generateComplexObjectValue(fieldType, project, contextClass);
                 }
         }
     }
@@ -208,10 +216,110 @@ public class JavaClassFieldParser {
     private static final ThreadLocal<Set<String>> PARSING_TYPES = ThreadLocal.withInitial(HashSet::new);
     
     /**
+     * 生成List类型的示例值
+     */
+    @NotNull
+    private static String generateListValue(@NotNull String listType, @Nullable Project project, @Nullable PsiClass contextClass) {
+        if (project == null) {
+            return "[]";
+        }
+        
+        // 提取泛型类型
+        String genericType = extractGenericType(listType);
+        if (genericType == null || genericType.isEmpty()) {
+            return "[]";
+        }
+        
+        // 处理基本类型
+        if (isPrimitiveType(genericType)) {
+            return generatePrimitiveListValue(genericType);
+        }
+        
+        // 处理复杂对象类型
+        String elementValue = generateComplexObjectValue(genericType, project, contextClass);
+        if (elementValue.equals("\"\"")) {
+            return "[]";
+        }
+        
+        return "[" + elementValue + "]";
+    }
+    
+    /**
+     * 提取List泛型类型
+     */
+    @Nullable
+    private static String extractGenericType(@NotNull String listType) {
+        int startIndex = listType.indexOf('<');
+        int endIndex = listType.lastIndexOf('>');
+        
+        if (startIndex != -1 && endIndex != -1 && startIndex < endIndex) {
+            return listType.substring(startIndex + 1, endIndex).trim();
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 判断是否为基本类型
+     */
+    private static boolean isPrimitiveType(@NotNull String type) {
+        return type.equals("String") || type.equals("java.lang.String") ||
+               type.equals("Integer") || type.equals("java.lang.Integer") ||
+               type.equals("Long") || type.equals("java.lang.Long") ||
+               type.equals("Double") || type.equals("java.lang.Double") ||
+               type.equals("Float") || type.equals("java.lang.Float") ||
+               type.equals("Boolean") || type.equals("java.lang.Boolean") ||
+               type.equals("int") || type.equals("long") || type.equals("double") ||
+               type.equals("float") || type.equals("boolean");
+    }
+    
+    /**
+     * 生成基本类型List的示例值
+     */
+    @NotNull
+    private static String generatePrimitiveListValue(@NotNull String primitiveType) {
+        switch (primitiveType) {
+            case "String":
+            case "java.lang.String":
+                return "[\"example\"]";
+            case "Integer":
+            case "java.lang.Integer":
+            case "int":
+                return "[1]";
+            case "Long":
+            case "java.lang.Long":
+            case "long":
+                return "[1L]";
+            case "Double":
+            case "java.lang.Double":
+            case "double":
+                return "[1.0]";
+            case "Float":
+            case "java.lang.Float":
+            case "float":
+                return "[1.0f]";
+            case "Boolean":
+            case "java.lang.Boolean":
+            case "boolean":
+                return "[true]";
+            default:
+                return "[]";
+        }
+    }
+    
+    /**
      * 生成复杂对象的示例值
      */
     @NotNull
     private static String generateComplexObjectValue(@NotNull String fieldType, @Nullable Project project) {
+        return generateComplexObjectValue(fieldType, project, null);
+    }
+    
+    /**
+     * 生成复杂对象的示例值（带上下文类）
+     */
+    @NotNull
+    private static String generateComplexObjectValue(@NotNull String fieldType, @Nullable Project project, @Nullable PsiClass contextClass) {
         if (project == null) {
             return "\"\"";
         }
@@ -226,8 +334,11 @@ public class JavaClassFieldParser {
         try {
             parsingTypes.add(fieldType);
             
+            // 使用TypeResolver解析类型全路径
+            String resolvedType = TypeResolver.resolveFullTypeName(fieldType, contextClass, project);
+            
             // 递归解析复杂对象的字段
-            List<FieldInfo> nestedFields = parseClassFields(fieldType, project);
+            List<FieldInfo> nestedFields = parseClassFields(resolvedType, project);
             if (!nestedFields.isEmpty()) {
                 StringBuilder json = new StringBuilder();
                 json.append("{");
@@ -265,7 +376,24 @@ public class JavaClassFieldParser {
         List<FieldInfo> defaultFields = new ArrayList<>();
         
         // 根据类名推测可能的字段
-        if (className.contains("CompanyInfoDetailQry") || className.contains("CompanyInfo")) {
+        if (className.contains("StoreCompanyBlackImport4ZyDTO")) {
+            if (className.endsWith(".Row")) {
+                // 内部类Row的字段
+                defaultFields.add(new FieldInfo("companyId", "java.lang.String", "\"example\""));
+                defaultFields.add(new FieldInfo("danwBh", "java.lang.String", "\"example\""));
+                defaultFields.add(new FieldInfo("freezeCause", "java.lang.String", "\"example\""));
+                defaultFields.add(new FieldInfo("errorMessage", "java.lang.String", "\"example\""));
+                defaultFields.add(new FieldInfo("checkPass", "java.lang.Boolean", "true"));
+            } else {
+                // 主类的字段
+                defaultFields.add(new FieldInfo("storeId", "java.lang.Long", "1L"));
+                defaultFields.add(new FieldInfo("createUserName", "java.lang.String", "\"example\""));
+                defaultFields.add(new FieldInfo("createUser", "java.lang.Long", "1L"));
+                // rows字段使用List<Row>类型
+                String rowJson = "{\"class\":\"com.jzt.zhcai.user.storecompanyblack.dto.StoreCompanyBlackImport4ZyDTO.Row\", \"companyId\":\"example\", \"danwBh\":\"example\", \"freezeCause\":\"example\",\"errorMessage\":\"example\", \"checkPass\": true}";
+                defaultFields.add(new FieldInfo("rows", "java.util.List<com.jzt.zhcai.user.storecompanyblack.dto.StoreCompanyBlackImport4ZyDTO.Row>", "[" + rowJson + "]"));
+            }
+        } else if (className.contains("CompanyInfoDetailQry") || className.contains("CompanyInfo")) {
             defaultFields.add(new FieldInfo("id", "java.lang.Long", "123L"));
             defaultFields.add(new FieldInfo("name", "java.lang.String", "\"测试公司\""));
             defaultFields.add(new FieldInfo("code", "java.lang.String", "\"TEST001\""));

@@ -189,23 +189,21 @@ public class DubboCommandGenerator {
         
         // 处理String类型
         if ("String".equals(genericType) || "java.lang.String".equals(genericType)) {
-            return "[]"; // String类型使用空数组
+            return "[\"example\"]"; // String类型使用示例值
         }
         
         // 处理复杂对象类型
         StringBuilder json = new StringBuilder();
-        json.append("\"" + paramName + "\":[{");
+        json.append("[{");
         
         // 尝试解析泛型类型的全路径
         String resolvedType = resolveFullClassName(genericType, methodInfo.getContainingClass(), project);
-        json.append("\"class\":\"").append(resolvedType).append("\"");
+        json.append("\"class\":\"").append(resolvedType.isEmpty() ? "" : resolvedType).append("\"");
         
         // 尝试解析字段
         String exampleFields = generateExampleFields(resolvedType, project);
         if (!exampleFields.isEmpty() && !exampleFields.equals("\"\": \"\"")) {
-            json.append(",").append(exampleFields);
-        } else {
-            json.append(",\"\": \"\"");
+            json.append(", ").append(exampleFields);
         }
         
         json.append("}]");

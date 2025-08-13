@@ -1,7 +1,7 @@
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "1.9.25"
-    id("org.jetbrains.intellij.platform") version "2.1.0"
+    id("org.jetbrains.intellij.platform") version "2.0.1"
 }
 
 group = "com.hongyan"
@@ -107,6 +107,11 @@ tasks {
         mainClass.set("com.hongyan.dubboinvoke.SimpleJsonTest")
     }
     
+    register<JavaExec>("runTestInvokeFormat") {
+        classpath = sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.TestInvokeFormat")
+    }
+    
     register<JavaExec>("runFieldGenerationTest") {
         group = "application"
         description = "Run FieldGenerationTest"
@@ -146,5 +151,30 @@ tasks {
         description = "Run NestedObjectTest"
         classpath = sourceSets["test"].runtimeClasspath
         mainClass.set("com.hongyan.dubboinvoke.NestedObjectTest")
+    }
+    
+    register<JavaExec>("runInnerClassListTest") {
+        group = "application"
+        description = "Run InnerClassListTest"
+        classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.test.InnerClassListTest")
+    }
+    
+    register<Test>("runListRowTest") {
+        group = "verification"
+        description = "Run ListRowTest"
+        useJUnitPlatform()
+        include("**/ListRowTest.class")
+        testLogging {
+            events("passed", "skipped", "failed")
+            showStandardStreams = true
+        }
+    }
+    
+    register<JavaExec>("testListRowParsing") {
+        group = "verification"
+        description = "Test List<Row> inner class parsing"
+        classpath = sourceSets["main"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.TestListRowParsing")
     }
 }
