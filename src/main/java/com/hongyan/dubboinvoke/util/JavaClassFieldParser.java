@@ -215,6 +215,10 @@ public class JavaClassFieldParser {
     // 用于防止无限递归的类型集合
     private static final ThreadLocal<Set<String>> PARSING_TYPES = ThreadLocal.withInitial(HashSet::new);
     
+    // 递归深度限制
+    private static final int MAX_RECURSION_DEPTH = 5;
+    private static final ThreadLocal<Integer> RECURSION_DEPTH = ThreadLocal.withInitial(() -> 0);
+    
     /**
      * 生成List类型的示例值
      */
@@ -324,6 +328,13 @@ public class JavaClassFieldParser {
             return "\"\"";
         }
         
+        // 检查递归深度限制
+        Integer currentDepth = RECURSION_DEPTH.get();
+        if (currentDepth >= MAX_RECURSION_DEPTH) {
+            System.out.println("[DEBUG] Maximum recursion depth reached for type: " + fieldType + ", depth: " + currentDepth);
+            return "\"\"";
+        }
+        
         // 防止无限递归
         Set<String> parsingTypes = PARSING_TYPES.get();
         if (parsingTypes.contains(fieldType)) {
@@ -333,6 +344,7 @@ public class JavaClassFieldParser {
         
         try {
             parsingTypes.add(fieldType);
+            RECURSION_DEPTH.set(currentDepth + 1);
             
             // 使用TypeResolver解析类型全路径
             String resolvedType = TypeResolver.resolveFullTypeName(fieldType, contextClass, project);
@@ -350,8 +362,10 @@ public class JavaClassFieldParser {
             System.out.println("[DEBUG] Failed to parse nested object: " + fieldType + ", error: " + e.getMessage());
         } finally {
             parsingTypes.remove(fieldType);
+            RECURSION_DEPTH.set(currentDepth);
             if (parsingTypes.isEmpty()) {
                 PARSING_TYPES.remove();
+                RECURSION_DEPTH.remove();
             }
         }
         

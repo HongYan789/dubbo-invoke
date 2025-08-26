@@ -48,6 +48,12 @@ public final class DubboConfig implements PersistentStateComponent<DubboConfig> 
     
     // 默认参数值模板
     public boolean useExampleValues = true;
+    
+    // 服务端口
+    public String servicePort = "20880";
+    
+    // 服务地址
+    public String serviceAddress = "";
 
     public static DubboConfig getInstance(@NotNull Project project) {
         return project.getService(DubboConfig.class);
@@ -142,5 +148,21 @@ public final class DubboConfig implements PersistentStateComponent<DubboConfig> 
 
     public void setUseExampleValues(boolean useExampleValues) {
         this.useExampleValues = useExampleValues;
+    }
+    
+    public String getServicePort() {
+        return servicePort;
+    }
+    
+    public void setServicePort(String servicePort) {
+        this.servicePort = servicePort;
+    }
+    
+    public String getServiceAddress() {
+        return serviceAddress;
+    }
+    
+    public void setServiceAddress(String serviceAddress) {
+        this.serviceAddress = serviceAddress;
     }
 }
