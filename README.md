@@ -12,6 +12,7 @@ A modern IntelliJ IDEA plugin for generating Dubbo invoke commands from Java int
 - 💡 **Smart Parameters**: Automatically generate example parameter values for basic types and complex objects
 - 🎯 **Complete Type Display**: Method signatures show full package paths including return types and parameter types
 - 📊 **Method Information**: Detailed display of method return types, parameter lists and complete signature information
+- 🔁 **Method Signature Caching**: Cache method signatures to improve performance and accuracy
 <!-- Plugin description end -->
 
 ## 安装方法
@@ -120,6 +121,10 @@ invoke com.example.OrderService.batchProcess([{"class":"com.example.dto.OrderIte
 - 复杂的企业级项目，需要明确区分不同包下的同名类
 - 泛型方法的调用，需要准确的类型信息
 - 代码审查和文档生成
+
+## 版本更新记录
+
+详细的功能更新和问题修复请查看 [VERSION_UPGRADE_CHANGELOG.md](VERSION_UPGRADE_CHANGELOG.md) 文件。
 
 ## 快捷键
 

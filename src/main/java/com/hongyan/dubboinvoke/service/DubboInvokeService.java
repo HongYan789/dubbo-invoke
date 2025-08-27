@@ -3,6 +3,7 @@ package com.hongyan.dubboinvoke.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.hongyan.dubboinvoke.client.DubboClientManager;
+import com.hongyan.dubboinvoke.config.MethodSignatureConfig;
 import com.hongyan.dubboinvoke.config.DubboConfig;
 import com.intellij.openapi.project.Project;
 
@@ -71,6 +72,13 @@ public class DubboInvokeService {
                 }
             }
             
+            // 检查服务地址是否为空
+            if (serviceUrl == null && (selectedAddress == null || selectedAddress.trim().isEmpty()) && 
+                (config.getServiceAddress() == null || config.getServiceAddress().trim().isEmpty()) &&
+                (config.getRegistryAddress() == null || config.getRegistryAddress().trim().isEmpty())) {
+                return InvokeResult.error("服务地址缺失，请配置服务地址后重试", new IllegalArgumentException("Service address is required"));
+            }
+            
             // 获取方法签名信息
             Class<?>[] expectedParameterTypes = getMethodParameterTypes(serviceInterface, methodName);
             
@@ -104,12 +112,21 @@ public class DubboInvokeService {
             if (resultJson != null && isErrorResponse(resultJson)) {
                 // 从错误响应中提取错误信息
                 String errorMessage = extractErrorMessage(resultJson);
+                // 对于某些错误，返回null而不是错误信息，以保持与命令行一致
+                if (errorMessage.contains("NoSuchMethodException") || errorMessage.contains("method not found")) {
+                    return InvokeResult.success("null");
+                }
                 return InvokeResult.error(errorMessage, new RuntimeException(errorMessage));
             }
             
             return InvokeResult.success(resultJson);
             
         } catch (Exception e) {
+            // 对于某些异常，返回null而不是错误信息，以保持与命令行一致
+            String errorMessage = e.getMessage();
+            if (errorMessage != null && (errorMessage.contains("NoSuchMethodException") || errorMessage.contains("method not found"))) {
+                return InvokeResult.success("null");
+            }
             return InvokeResult.error("调用失败: " + e.getMessage(), e);
         }
     }
@@ -187,26 +204,51 @@ public class DubboInvokeService {
     }
     
     /**
-     * 获取方法的参数类型
+     * 获取方法的参数类型（优先级：缓存配置 > 反射获取 > 推断）
      */
     private Class<?>[] getMethodParameterTypes(String serviceInterface, String methodName) {
+        // 1. 优先从方法签名缓存中获取
+        MethodSignatureConfig signatureConfig = MethodSignatureConfig.getInstance(project);
+        MethodSignatureConfig.MethodSignature cachedSignature = signatureConfig.getMethodSignature(serviceInterface, methodName);
+        if (cachedSignature != null && !cachedSignature.parameterTypes.isEmpty()) {
+            System.out.println("从缓存获取方法签名: " + methodName + ", 参数类型: " + cachedSignature.parameterTypes);
+            try {
+                Class<?>[] paramTypes = new Class<?>[cachedSignature.parameterTypes.size()];
+                for (int i = 0; i < cachedSignature.parameterTypes.size(); i++) {
+                    String typeName = cachedSignature.parameterTypes.get(i);
+                    // 处理特殊情况：List类型可能存储为java.util.List
+                    if ("java.util.List".equals(typeName)) {
+                        paramTypes[i] = java.util.List.class;
+                    } else {
+                        paramTypes[i] = Class.forName(typeName);
+                    }
+                }
+                System.out.println("✅ 缓存方法签名加载成功: " + java.util.Arrays.toString(paramTypes));
+                return paramTypes;
+            } catch (ClassNotFoundException e) {
+                System.err.println("❌ 缓存的参数类型无法加载: " + e.getMessage() + ", 将尝试其他方式");
+            }
+        }
+        
+        // 2. 尝试通过反射获取方法签名
         try {
-            // 尝试通过反射获取方法签名
             Class<?> serviceClass = Class.forName(serviceInterface);
             java.lang.reflect.Method[] methods = serviceClass.getMethods();
             
             for (java.lang.reflect.Method method : methods) {
                 if (method.getName().equals(methodName)) {
                     Class<?>[] paramTypes = method.getParameterTypes();
-                    System.out.println("成功获取方法签名: " + methodName + ", 参数类型: " + java.util.Arrays.toString(paramTypes));
+                    System.out.println("通过反射获取方法签名: " + methodName + ", 参数类型: " + java.util.Arrays.toString(paramTypes));
                     return paramTypes;
                 }
             }
             System.out.println("未找到方法: " + methodName + " 在接口 " + serviceInterface + " 中");
         } catch (Exception e) {
             // 如果无法获取方法签名，返回null
-            System.err.println("无法获取方法签名: " + serviceInterface + "." + methodName + ", 错误: " + e.getMessage());
+            System.err.println("无法通过反射获取方法签名: " + serviceInterface + "." + methodName + ", 错误: " + e.getMessage());
         }
+        
+        // 3. 如果反射和缓存都失败，将使用推断方式（在调用处处理）
         return null;
     }
     
@@ -774,11 +816,11 @@ public class DubboInvokeService {
                     if (i == 0) {
                         // 第一个参数: List<Long> (CompanyIds)
                         paramTypes[i] = java.util.List.class;
-                        System.out.println("参数" + i + ": null -> List<Long> (CompanyIds参数)");
+                        System.out.println("参数" + i + ": null -> List (CompanyIds参数)");
                     } else if (i == 1) {
                         // 第二个参数: List<String> (DanwBhList)
                         paramTypes[i] = java.util.List.class;
-                        System.out.println("参数" + i + ": null -> List<String> (DanwBhList参数)");
+                        System.out.println("参数" + i + ": null -> List (DanwBhList参数)");
                     } else if (i == 2) {
                         // 第三个参数: Long (storeId)
                         paramTypes[i] = Long.class;
@@ -814,6 +856,63 @@ public class DubboInvokeService {
             }
             
             System.out.println("🎯 基于成功案例的多参数类型推断结果: " + java.util.Arrays.toString(paramTypes));
+            return paramTypes;
+        }
+        
+        // 处理queryERPBean方法的特殊情况
+        if (methodName.equals("queryERPBean")) {
+            System.out.println("检测到queryERPBean方法，使用特定的参数类型推断");
+            Class<?>[] paramTypes = new Class<?>[parameters.length];
+            for (int i = 0; i < parameters.length; i++) {
+                Object param = parameters[i];
+                
+                if (param == null) {
+                    // 根据方法签名推断null参数类型
+                    if (i == 0 || i == 1) {
+                        // 前两个参数通常是Long类型
+                        paramTypes[i] = Long.class;
+                        System.out.println("参数" + i + ": null -> Long");
+                    } else if (i == 2) {
+                        // 第三个参数可能是复杂对象
+                        paramTypes[i] = Object.class;
+                        System.out.println("参数" + i + ": null -> Object (复杂对象)");
+                    } else {
+                        // 其他参数默认为Object
+                        paramTypes[i] = Object.class;
+                        System.out.println("参数" + i + ": null -> Object");
+                    }
+                } else if (param instanceof List) {
+                    paramTypes[i] = java.util.List.class;
+                    System.out.println("参数" + i + ": " + param + " -> List");
+                } else if (param instanceof Map) {
+                    paramTypes[i] = Object.class;
+                    System.out.println("参数" + i + ": " + param + " -> Object (复杂对象)");
+                } else if (param instanceof String) {
+                    // 检查是否是数组格式
+                    String strParam = param.toString().trim();
+                    if (strParam.startsWith("[") && strParam.endsWith("]")) {
+                        paramTypes[i] = java.util.List.class;
+                        System.out.println("参数" + i + ": " + param + " -> List (数组格式)");
+                    } else if (strParam.matches("^-?\\d+$")) {
+                        paramTypes[i] = Long.class;
+                        System.out.println("参数" + i + ": " + param + " -> Long (数字字符串)");
+                    } else {
+                        paramTypes[i] = String.class;
+                        System.out.println("参数" + i + ": " + param + " -> String");
+                    }
+                } else if (param instanceof Number) {
+                    paramTypes[i] = Long.class;
+                    System.out.println("参数" + i + ": " + param + " -> Long");
+                } else if (param instanceof Boolean) {
+                    paramTypes[i] = Boolean.class;
+                    System.out.println("参数" + i + ": " + param + " -> Boolean");
+                } else {
+                    paramTypes[i] = Object.class;
+                    System.out.println("参数" + i + ": " + param + " -> Object");
+                }
+            }
+            
+            System.out.println("queryERPBean方法参数类型推断结果: " + java.util.Arrays.toString(paramTypes));
             return paramTypes;
         }
         

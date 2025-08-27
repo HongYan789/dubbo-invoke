@@ -3,6 +3,9 @@ package com.hongyan.dubboinvoke.ui;
 import com.hongyan.dubboinvoke.util.JavaMethodParser;
 import com.hongyan.dubboinvoke.generator.DubboCommandGenerator;
 import com.hongyan.dubboinvoke.service.DubboInvokeService;
+import com.hongyan.dubboinvoke.ui.MethodSignatureConfigDialog;
+import com.hongyan.dubboinvoke.ui.MethodSignatureManagerDialog;
+import com.hongyan.dubboinvoke.config.MethodSignatureConfig;
 import com.hongyan.dubboinvoke.util.OperationLogger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
@@ -687,10 +690,17 @@ public class DubboInvokeDialog extends DialogWrapper {
         copyResultButton.setPreferredSize(new Dimension(100, 28));
         copyResultButton.addActionListener(e -> copyToClipboard(resultArea.getText()));
         
+        // 添加配置方法签名按钮
+        JButton configSignatureButton = new JButton("配置签名");
+        configSignatureButton.setPreferredSize(new Dimension(90, 28));
+        configSignatureButton.addActionListener(e -> configureMethodSignature());
+        configSignatureButton.setToolTipText("手动配置方法参数类型，避免类型推导错误");
+        
         buttonPanel.add(viewLogsButton);
         buttonPanel.add(invokeButton);
         buttonPanel.add(copyButton);
         buttonPanel.add(copyResultButton);
+        buttonPanel.add(configSignatureButton);
         
         // 确保状态栏不会与按钮重叠
         statusPanel.setPreferredSize(new Dimension(600, 35));
@@ -708,6 +718,77 @@ public class DubboInvokeDialog extends DialogWrapper {
         String logFilePath = logger.getLogFilePath();
         String message = "日志文件位置:\n" + logFilePath + "\n\n请复制此路径并在文件管理器中打开。";
         Messages.showInfoMessage(message, "日志文件位置");
+    }
+    
+    /**
+     * 配置方法签名
+     */
+    private void configureMethodSignature() {
+        String serviceInterface = methodInfo.getClassName();
+        String methodName = methodInfo.getMethodName();
+        
+        // 打开方法签名配置对话框
+        MethodSignatureConfigDialog dialog = new MethodSignatureConfigDialog(project, serviceInterface, methodName);
+        if (dialog.showAndGet()) {
+            // 配置保存成功，显示提示信息
+            Messages.showInfoMessage(
+                "方法签名配置已保存！\n\n" +
+                "下次调用 " + serviceInterface + "." + methodName + " 时将使用你配置的参数类型。",
+                "配置成功"
+            );
+        }
+    }
+    
+    /**
+     * 显示参数类型错误信息到结果区域
+     */
+    private void showParameterTypeErrorInResultArea(String errorMessage) {
+        String serviceInterface = methodInfo.getClassName();
+        String methodName = methodInfo.getMethodName();
+        
+        resultArea.setText("调用失败，可能是参数类型不匹配导致的：\n\n" +
+            errorMessage + "\n\n" +
+            "建议配置 " + serviceInterface + "." + methodName + " 的正确参数类型。\n" +
+            "可以通过点击\"配置签名\"按钮进行配置，配置后将避免类型推导错误。");
+    }
+    
+    /**
+     * 检查是否是参数类型错误
+     */
+    private boolean isParameterTypeError(String errorMessage) {
+        if (errorMessage == null) {
+            return false;
+        }
+        
+        String lowerError = errorMessage.toLowerCase();
+        return lowerError.contains("nosuchmethodexception") ||
+               lowerError.contains("method not found") ||
+               lowerError.contains("方法未找到") ||
+               lowerError.contains("parameter type") ||
+               lowerError.contains("参数类型");
+    }
+    
+    /**
+     * 显示参数类型错误对话框
+     */
+    private void showParameterTypeErrorDialog(String errorMessage) {
+        String serviceInterface = methodInfo.getClassName();
+        String methodName = methodInfo.getMethodName();
+        
+        int result = JOptionPane.showConfirmDialog(
+            this.getContentPane(),
+            "调用失败，可能是参数类型不匹配导致的：\n\n" +
+            errorMessage + "\n\n" +
+            "是否现在配置 " + serviceInterface + "." + methodName + " 的正确参数类型？\n" +
+            "配置后将避免类型推导错误。",
+            "参数类型错误",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+        
+        if (result == JOptionPane.YES_OPTION) {
+            configureMethodSignature();
+        }
     }
 
     private void copyToClipboard(String text) {
@@ -744,23 +825,24 @@ public class DubboInvokeDialog extends DialogWrapper {
             try {
                 logger.log("开始异步执行Dubbo调用");
                 
+                // 获取服务地址配置
+                String serviceAddress = getSelectedServiceAddress();
+                logger.log("获取到的服务地址: " + serviceAddress);
+                
+                // 检查服务地址是否为空
+                if (serviceAddress == null || serviceAddress.trim().isEmpty()) {
+                    return DubboInvokeService.InvokeResult.error("调用地址缺失，请配置服务地址后重试", new IllegalArgumentException("Service address is required"));
+                }
+                
                 // 延迟初始化DubboInvokeService，避免静态初始化问题
                 if (dubboInvokeService == null) {
                     logger.log("初始化DubboInvokeService");
                     dubboInvokeService = new DubboInvokeService(project);
                 }
                 
-                // 获取服务地址配置
-                String serviceAddress = getSelectedServiceAddress();
-                logger.log("获取到的服务地址: " + serviceAddress);
-                
-                if (serviceAddress != null && !serviceAddress.trim().isEmpty()) {
-                    // 设置服务地址到DubboInvokeService
-                    dubboInvokeService.setServiceAddress(serviceAddress);
-                    logger.log("服务地址已设置到DubboInvokeService");
-                } else {
-                    logger.log("警告: 服务地址为空");
-                }
+                // 设置服务地址到DubboInvokeService
+                dubboInvokeService.setServiceAddress(serviceAddress);
+                logger.log("服务地址已设置到DubboInvokeService");
                 
                 String serviceName = methodInfo.getClassName();
                 String methodName = methodInfo.getMethodName();
@@ -816,6 +898,12 @@ public class DubboInvokeDialog extends DialogWrapper {
                     } else {
                         logger.log("调用失败: " + result.getErrorMessage());
                         String errorMsg = result.getErrorMessage();
+                        
+                        // 检查是否是参数类型问题，如果是则在结果区域提示而不是弹框
+                        if (isParameterTypeError(errorMsg)) {
+                            showParameterTypeErrorInResultArea(errorMsg);
+                        }
+                        
                         if (errorMsg.length() > 50) {
                             errorMsg = errorMsg.substring(0, 47) + "...";
                         }
@@ -1387,7 +1475,7 @@ public class DubboInvokeDialog extends DialogWrapper {
                  }
              } else if (component instanceof JBTextArea) {
                 String cleanValue = value;
-                // 直接设置值，不进行额外的包装或处理
+                // �接设置值，不进行额外的包装或处理
                 if (cleanValue.startsWith("\"") && cleanValue.endsWith("\"") && 
                     !cleanValue.startsWith("\"{\"") && !cleanValue.startsWith("\"[")) {
                      cleanValue = cleanValue.substring(1, cleanValue.length() - 1);

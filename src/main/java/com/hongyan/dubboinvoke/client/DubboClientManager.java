@@ -449,7 +449,7 @@ public class DubboClientManager {
      */
     public void clearServiceCache() {
         serviceCache.clear();
-        logger.log("服务缓存已清空");
+        logger.log("服务缓已清空");
     }
     
     /**

@@ -55,5 +55,13 @@
                 description="Configure Dubbo invoke settings">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
+        
+        <!-- Method Signature Manager Action -->
+        <action id="DubboInvoke.MethodSignatureManager" 
+                class="com.hongyan.dubboinvoke.action.MethodSignatureManagerAction"
+                text="Method Signature Manager"
+                description="Manage cached Dubbo method signatures">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>
