@@ -161,6 +161,12 @@ cd dubbo-invoke
 ./gradlew verifyPlugin
 ```
 
+##### 效果图
+
+![longshot20250828010651](https://gitee.com/hongyan008/blog-img/raw/img/img/longshot20250828010651.png)
+
+
+
 ## 贡献
 
 欢迎提交Issue和Pull Request来改进这个插件！
