@@ -400,19 +400,19 @@ public class JavaClassFieldParser {
                 defaultFields.add(new FieldInfo("checkPass", "java.lang.Boolean", "true"));
             } else {
                 // 主类的字段
-                defaultFields.add(new FieldInfo("storeId", "java.lang.Long", "1L"));
+                defaultFields.add(new FieldInfo("storeId", "java.lang.Long", "1"));
                 defaultFields.add(new FieldInfo("createUserName", "java.lang.String", "\"example\""));
-                defaultFields.add(new FieldInfo("createUser", "java.lang.Long", "1L"));
+                defaultFields.add(new FieldInfo("createUser", "java.lang.Long", "1"));
                 // rows字段使用List<Row>类型
                 String rowJson = "{\"class\":\"com.jzt.zhcai.user.storecompanyblack.dto.StoreCompanyBlackImport4ZyDTO.Row\", \"companyId\":\"example\", \"danwBh\":\"example\", \"freezeCause\":\"example\",\"errorMessage\":\"example\", \"checkPass\": true}";
                 defaultFields.add(new FieldInfo("rows", "java.util.List<com.jzt.zhcai.user.storecompanyblack.dto.StoreCompanyBlackImport4ZyDTO.Row>", "[" + rowJson + "]"));
             }
         } else if (className.contains("CompanyInfoDetailQry") || className.contains("CompanyInfo")) {
-            defaultFields.add(new FieldInfo("id", "java.lang.Long", "123L"));
+            defaultFields.add(new FieldInfo("id", "java.lang.Long", "123"));
             defaultFields.add(new FieldInfo("name", "java.lang.String", "\"测试公司\""));
             defaultFields.add(new FieldInfo("code", "java.lang.String", "\"TEST001\""));
         } else if (className.contains("UserProfileRequest")) {
-            defaultFields.add(new FieldInfo("id", "java.lang.Long", "1L"));
+            defaultFields.add(new FieldInfo("id", "java.lang.Long", "1"));
             defaultFields.add(new FieldInfo("name", "java.lang.String", "\"example\""));
             defaultFields.add(new FieldInfo("email", "java.lang.String", "\"user@example.com\""));
             defaultFields.add(new FieldInfo("address", "com.hongyan.dubboinvoke.dto.AddressInfo", "{\"province\":\"example\",\"city\":\"example\",\"district\":\"example\",\"street\":\"example\",\"zipCode\":\"example\"}"));

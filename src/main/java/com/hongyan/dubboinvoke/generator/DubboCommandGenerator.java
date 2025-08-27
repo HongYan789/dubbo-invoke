@@ -218,7 +218,7 @@ public class DubboCommandGenerator {
             case "Long":
             case "java.lang.Long":
             case "long":
-                return "[1L]";
+                return "[1]";
             case "Integer":
             case "java.lang.Integer":
             case "int":
@@ -230,7 +230,7 @@ public class DubboCommandGenerator {
             case "Float":
             case "java.lang.Float":
             case "float":
-                return "[1.0f]";
+                return "[1.0]";
             case "Boolean":
             case "java.lang.Boolean":
             case "boolean":

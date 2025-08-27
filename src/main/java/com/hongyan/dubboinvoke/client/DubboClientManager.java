@@ -11,20 +11,15 @@ import com.alibaba.dubbo.rpc.service.GenericService;
 import com.hongyan.dubboinvoke.util.OperationLogger;
 import com.hongyan.dubboinvoke.util.ModuleOpener;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Dubbo客户端管理器
- * 负责管理Dubbo服务的连接和调用，支持HTTP备选方案
+ * 负责管理Dubbo服务的连接和调用，使用简化的Dubbo 2.6 API
  */
 public class DubboClientManager {
     
@@ -34,7 +29,7 @@ public class DubboClientManager {
     // 缓存已创建的服务引用
     private final Map<String, GenericService> serviceCache = new ConcurrentHashMap<>();
     
-    // Socket客户端（备选方案）
+    // JSON序列化工具
     private final ObjectMapper objectMapper;
     
     // 应用配置
@@ -43,14 +38,11 @@ public class DubboClientManager {
     // 注册中心地址
     private volatile String registryAddress;
     
-    // 是否使用Socket备选方案
-    private volatile boolean useSocketFallback = false;
-    
     private DubboClientManager() {
-        logger.log("初始化DubboClientManager");
+        logger.log("初始化DubboClientManager（简化版）");
         logger.logSystemInfo();
         
-        // 初始化HTTP客户端作为备选方案
+        // 初始化JSON序列化工具
         this.objectMapper = createOptimizedObjectMapper();
         
         // 提前尝试打开JDK模块（尽力而为）
@@ -61,6 +53,11 @@ public class DubboClientManager {
             logger.log("JDK模块打开失败: " + e.getMessage());
             logger.logException(e);
         }
+        
+        // 初始化Dubbo应用配置
+        initializeDubboApplication();
+        
+        logger.log("DubboClientManager初始化完成");
     }
     
     public static DubboClientManager getInstance() {
@@ -75,40 +72,31 @@ public class DubboClientManager {
     }
     
     /**
-     * 初始化Dubbo系统属性（完全避免创建Dubbo对象）
+     * 初始化Dubbo应用配置
      */
-    private void initializeConfigs() {
+    private void initializeDubboApplication() {
         try {
-            logger.log("开始设置Dubbo系统属性");
+            logger.log("开始初始化简化的Dubbo应用配置");
             
-            // 只设置系统属性，不创建任何Dubbo对象
-            System.setProperty("dubbo.application.logger", "slf4j");
-            System.setProperty("dubbo.reference.check", "false");
-            System.setProperty("dubbo.consumer.check", "false");
-            System.setProperty("dubbo.registry.check", "false");
-            System.setProperty("dubbo.application.metadata-type", "local");
-            System.setProperty("dubbo.metadata-report.check", "false");
-            System.setProperty("dubbo.config-center.check", "false");
-            System.setProperty("dubbo.application.auto-register", "false");
+            // 创建应用配置
+            application = new ApplicationConfig();
+            application.setName("dubbo-invoke-plugin");
             
-            logger.log("Dubbo系统属性设置完成");
+            logger.log("简化的Dubbo应用配置初始化成功");
             
         } catch (Exception e) {
-            logger.log("设置Dubbo系统属性失败: " + e.getMessage());
-            // 不抛出异常，让程序继续运行
+            logger.log("初始化Dubbo应用配置失败: " + e.getMessage());
+            logger.logException(e);
+            throw new RuntimeException("无法初始化Dubbo应用配置", e);
         }
     }
     
     /**
-     * 更新注册中心配置（完全避免创建RegistryConfig对象）
+     * 更新注册中心配置
      */
     public void updateRegistryConfig(String registryAddress) {
         logger.log("更新注册中心配置: " + registryAddress);
         
-        // 确保系统属性已设置
-        initializeConfigs();
-        
-        // 不创建RegistryConfig对象，只记录地址用于后续使用
         this.registryAddress = registryAddress;
         
         if (registryAddress != null && !registryAddress.trim().isEmpty()) {
@@ -123,34 +111,33 @@ public class DubboClientManager {
     }
     
     /**
-     * 获取泛化服务引用（优先使用HTTP备选方案）
+     * 获取泛化服务引用
      */
     public GenericService getGenericService(String serviceInterface, String serviceUrl) {
         logger.log("开始获取泛化服务引用");
         logger.log("服务接口: " + serviceInterface);
         logger.log("服务地址: " + serviceUrl);
         
-        // 检查是否为注册中心模式
-        if (serviceUrl == null || serviceUrl.trim().isEmpty()) {
-            logger.log("检测到注册中心模式，但当前插件仅支持直连模式");
-            throw new RuntimeException("当前插件仅支持直连模式调用，请在Service Address中输入具体的服务地址（如：dubbo://10.7.8.50:16002）而不是注册中心地址");
+        // 处理注册中心模式：如果有注册中心地址但没有直连地址，使用注册中心
+        final String actualServiceUrl;
+        if ((serviceUrl == null || serviceUrl.trim().isEmpty()) && 
+            registryAddress != null && !registryAddress.trim().isEmpty()) {
+            actualServiceUrl = registryAddress;
+            logger.log("使用注册中心地址作为服务地址: " + actualServiceUrl);
+        } else {
+            actualServiceUrl = serviceUrl;
         }
         
-        String cacheKey = serviceInterface + "@" + serviceUrl;
+        String cacheKey = serviceInterface + "@" + actualServiceUrl;
         logger.log("缓存键: " + cacheKey);
         
         return serviceCache.computeIfAbsent(cacheKey, key -> {
             logger.log("创建新的服务引用: " + key);
             
-            // 直接使用Socket备选方案，避免Dubbo扩展机制问题
             try {
-                logger.log("使用Socket备选方案创建服务引用");
-                useSocketFallback = true;
-                GenericService socketService = createSocketGenericService(serviceInterface, serviceUrl);
-                logger.log("Socket备选方案成功");
-                return socketService;
+                return createDubboGenericService(serviceInterface, actualServiceUrl);
             } catch (Exception e) {
-                logger.log("Socket备选方案失败: " + e.getMessage());
+                logger.log("创建服务引用失败: " + e.getMessage());
                 logger.logException(e);
                 throw new RuntimeException("无法创建服务引用: " + e.getMessage(), e);
             }
@@ -158,142 +145,173 @@ public class DubboClientManager {
     }
     
     /**
-     * 创建Socket代理的GenericService
+     * 创建Dubbo泛化服务引用（优化版，处理类加载器问题）
      */
-    private GenericService createSocketGenericService(String serviceInterface, String serviceUrl) {
-        logger.log("创建Socket代理GenericService: " + serviceInterface);
+    private GenericService createDubboGenericService(String serviceInterface, String serviceUrl) {
+        logger.log("创建优化的Dubbo泛化服务引用: " + serviceInterface);
         
-        return new GenericService() {
-            @Override
-            public Object $invoke(String method, String[] parameterTypes, Object[] args) {
-                logger.log("Socket代理调用: " + method);
-                try {
-                    return invokeViaSocket(serviceUrl, serviceInterface, method, parameterTypes, args);
-                } catch (Exception e) {
-                    logger.log("Socket调用异常: " + e.getMessage());
-                    logger.logException(e);
-                    throw new RuntimeException("Socket调用失败: " + e.getMessage(), e);
-                }
-            }
-        };
-    }
-    
-    /**
-     * Socket备选方案调用
-     */
-    private Object invokeViaSocket(String serviceUrl, String serviceInterface, 
-                                  String methodName, String[] parameterTypes, 
-                                  Object[] parameters) throws Exception {
-        logger.log("启用Socket备选方案调用Dubbo服务");
-        logger.log("服务URL: " + serviceUrl);
-        logger.log("服务接口: " + serviceInterface);
-        logger.log("方法名: " + methodName);
-        
-        // 解析服务URL获取host和port
-        String[] hostPort = parseServiceUrl(serviceUrl);
-        String host = hostPort[0];
-        int port = Integer.parseInt(hostPort[1]);
+        // 保存当前线程的类加载器
+        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
         
         try {
-            NettyDubboClient socketClient = new NettyDubboClient(host, port);
+            // 设置类加载器为插件类加载器
+            ClassLoader pluginClassLoader = this.getClass().getClassLoader();
+            Thread.currentThread().setContextClassLoader(pluginClassLoader);
+            logger.log("已设置类加载器为插件类加载器");
             
-            // 转换参数类型
-            Class<?>[] paramTypes = null;
-            if (parameterTypes != null) {
-                paramTypes = new Class<?>[parameterTypes.length];
-                for (int i = 0; i < parameterTypes.length; i++) {
-                    paramTypes[i] = Class.forName(parameterTypes[i]);
+            // 创建引用配置，避免使用复杂的扩展机制
+            ReferenceConfig<GenericService> reference = new ReferenceConfig<GenericService>();
+            
+            // 设置应用配置
+            reference.setApplication(application);
+            
+            // 设置基本属性
+            reference.setInterface(serviceInterface);
+            reference.setGeneric(true);
+            reference.setCheck(false);
+            reference.setTimeout(30000);
+            reference.setRetries(0);
+            reference.setConnections(1); // 限制连接数
+            reference.setLazy(true);     // 延迟初始化
+            
+            // 设置服务地址
+            if (serviceUrl != null && !serviceUrl.trim().isEmpty()) {
+                if (serviceUrl.startsWith("dubbo://")) {
+                    logger.log("使用直连模式: " + serviceUrl);
+                    reference.setUrl(serviceUrl);
+                } else {
+                    logger.log("使用注册中心模式: " + serviceUrl);
+                    RegistryConfig registry = new RegistryConfig();
+                    registry.setAddress(serviceUrl);
+                    registry.setCheck(false);
+                    registry.setTimeout(10000); // 设置超时
+                    reference.setRegistry(registry);
                 }
+            } else {
+                throw new IllegalArgumentException("服务地址不能为空");
             }
             
-            return socketClient.invoke(serviceInterface, methodName, paramTypes, parameters);
+            // 尝试获取服务引用
+            GenericService genericService = reference.get();
+            logger.log("优化的Dubbo泛化服务引用创建成功");
+            return genericService;
+            
         } catch (Exception e) {
-            logger.log("Socket调用失败: " + e.getMessage());
+            logger.log("创建优化的Dubbo泛化服务引用失败: " + e.getMessage());
             logger.logException(e);
-            throw new RuntimeException("Socket调用失败: " + e.getMessage(), e);
-        }
-    }
-    
-    /**
-     * 解析服务URL获取host和port
-     */
-    private String[] parseServiceUrl(String serviceUrl) {
-        // 处理null或空字符串的情况
-        if (serviceUrl == null || serviceUrl.trim().isEmpty()) {
-            logger.log("服务URL为空，无法使用Socket方案，需要通过注册中心发现服务");
-            throw new IllegalArgumentException("Socket方案需要明确的服务地址，注册中心模式下无法使用Socket调用");
-        }
-        
-        String hostPort;
-        
-        // 解析dubbo://协议的URL
-        if (serviceUrl.startsWith("dubbo://")) {
-            hostPort = serviceUrl.substring(8); // 移除"dubbo://"
-            // 移除路径部分，只保留host:port
-            if (hostPort.contains("/")) {
-                hostPort = hostPort.substring(0, hostPort.indexOf("/"));
+            
+            // 对类加载器问题提供更好的提示
+            if (e.getMessage() != null && e.getMessage().contains("is not visible from class loader")) {
+                throw new RuntimeException("插件环境下的Dubbo类加载器可见性问题，建议使用注册中心模式: " + e.getMessage(), e);
             }
-        } else {
-            // 默认假设是host:port格式
-            hostPort = serviceUrl;
+            
+            throw new RuntimeException("无法创建Dubbo服务引用: " + e.getMessage(), e);
+        } finally {
+            // 恢复原有的类加载器
+            Thread.currentThread().setContextClassLoader(originalClassLoader);
+            logger.log("已恢复原有的类加载器");
         }
-        
-        if (!hostPort.contains(":")) {
-            return new String[]{hostPort, "20880"}; // 默认Dubbo端口
-        }
-        
-        String[] parts = hostPort.split(":");
-        return new String[]{parts[0], parts[1]};
     }
     
     /**
-     * 执行泛化调用
+     * 执行泛化调用（简化版，移除多层回退机制）
      */
     public Object invokeService(String serviceInterface, String serviceUrl, 
                                String methodName, String[] parameterTypes, Object[] parameters) {
         logger.log("开始执行Dubbo调用");
         logger.logDubboInvoke(serviceInterface, serviceUrl, methodName, parameterTypes, parameters);
         
+        // 确定实际的服务地址
+        final String actualServiceUrl;
+        if ((serviceUrl == null || serviceUrl.trim().isEmpty()) && 
+            registryAddress != null && !registryAddress.trim().isEmpty()) {
+            actualServiceUrl = registryAddress;
+            logger.log("使用注册中心地址作为服务地址: " + actualServiceUrl);
+        } else {
+            actualServiceUrl = serviceUrl;
+        }
+        
+        // 根据地址类型选择调用方式
+        if (actualServiceUrl != null && isRegistryAddress(actualServiceUrl)) {
+            // 注册中心模式调用
+            return invokeViaRegistry(serviceInterface, actualServiceUrl, methodName, parameterTypes, parameters);
+        } else if (actualServiceUrl != null && actualServiceUrl.startsWith("dubbo://")) {
+            // 直连模式调用
+            return invokeViaDirect(serviceInterface, actualServiceUrl, methodName, parameterTypes, parameters);
+        } else {
+            throw new RuntimeException("不支持的服务地址格式: " + actualServiceUrl + "，请使用zookeeper://、nacos://或dubbo://格式");
+        }
+    }
+    
+    /**
+     * 通过注册中心调用服务
+     */
+    private Object invokeViaRegistry(String serviceInterface, String registryUrl,
+                                    String methodName, String[] parameterTypes, Object[] parameters) {
+        logger.log("使用注册中心模式调用: " + registryUrl);
+        
+        try {
+            RegistryAwareDubboClient registryClient = RegistryAwareDubboClient.getInstance();
+            Object result = registryClient.invokeService(serviceInterface, registryUrl, methodName, parameterTypes, parameters);
+            logger.log("注册中心模式调用成功，返回结果类型: " + (result != null ? result.getClass().getName() : "null"));
+            return result;
+        } catch (Exception e) {
+            logger.log("注册中心模式调用失败: " + e.getMessage());
+            logger.logException(e);
+            throw new RuntimeException("注册中心调用失败: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 通过直连调用服务
+     */
+    private Object invokeViaDirect(String serviceInterface, String serviceUrl,
+                                  String methodName, String[] parameterTypes, Object[] parameters) {
+        logger.log("使用直连模式调用: " + serviceUrl);
+        
         try {
             GenericService genericService = getGenericService(serviceInterface, serviceUrl);
             logger.log("泛化服务获取成功，开始调用方法: " + methodName);
             
             Object result = genericService.$invoke(methodName, parameterTypes, parameters);
-            logger.log("Dubbo调用成功，返回结果类型: " + (result != null ? result.getClass().getName() : "null"));
+            logger.log("直连模式调用成功，返回结果类型: " + (result != null ? result.getClass().getName() : "null"));
             return result;
         } catch (Exception e) {
-            logger.log("Dubbo调用失败: " + e.getMessage());
+            logger.log("直连模式调用失败: " + e.getMessage());
             logger.logException(e);
-            throw new RuntimeException("Dubbo调用失败: " + e.getMessage(), e);
+            
+            // 对Hessian序列化错误的特殊处理
+            if (e.getCause() instanceof ExceptionInInitializerError || 
+                e.getMessage() != null && e.getMessage().contains("ExceptionInInitializerError")) {
+                logger.log("检测到Hessian序列化初始化错误，尝试替代方案");
+                throw new RuntimeException("远程服务返回数据序列化失败，可能是类加载或环境配置问题: " + e.getMessage(), e);
+            }
+            
+            // 针对类加载器可见性问题，提供更好的错误信息
+            if (e.getMessage() != null && e.getMessage().contains("is not visible from class loader")) {
+                throw new RuntimeException("Dubbo类加载器可见性问题，建议使用注册中心模式或检查插件依赖配置: " + e.getMessage(), e);
+            }
+            
+            throw new RuntimeException("直连调用失败: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * 判断是否为注册中心地址
+     */
+    private boolean isRegistryAddress(String address) {
+        if (address == null) return false;
+        String lower = address.toLowerCase();
+        return lower.startsWith("zookeeper://") ||
+               lower.startsWith("nacos://") ||
+               lower.startsWith("consul://") ||
+               lower.startsWith("redis://") ||
+               lower.startsWith("multicast://");
     }
     
     /**
      * 执行泛化调用并返回JSON格式结果
      */
-    /**
-     * 创建优化的ObjectMapper，用于处理复杂类型和集合
-     */
-    private ObjectMapper createOptimizedObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        
-        // 配置序列化特性
-        mapper.enable(SerializationFeature.INDENT_OUTPUT); // 格式化输出
-        mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS); // 允许空对象
-        mapper.enable(SerializationFeature.WRITE_ENUMS_USING_TO_STRING); // 枚举使用toString
-        mapper.enable(SerializationFeature.WRITE_NULL_MAP_VALUES); // 写入null值的Map
-        
-        // 配置反序列化特性
-        mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES); // 忽略未知属性
-        mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT); // 空字符串作为null
-        
-        // 配置生成器特性
-        mapper.getFactory().enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN); // BigDecimal不使用科学计数法
-        
-        logger.log("ObjectMapper配置完成，支持复杂类型序列化");
-        return mapper;
-    }
-    
     public String invokeServiceAsJson(String serviceInterface, String serviceUrl,
                                      String methodName, String[] parameterTypes, Object[] parameters) {
         logger.log("开始执行JSON格式的Dubbo调用");
@@ -302,8 +320,12 @@ public class DubboClientManager {
             Object result = invokeService(serviceInterface, serviceUrl, methodName, parameterTypes, parameters);
             logger.log("原始调用成功，开始序列化为JSON，结果类型: " + (result != null ? result.getClass().getName() : "null"));
             
+            // 处理和清理返回结果
+            Object cleanedResult = cleanResult(result);
+            logger.log("结果清理完成，清理后类型: " + (cleanedResult != null ? cleanedResult.getClass().getName() : "null"));
+            
             // 使用优化的ObjectMapper进行序列化
-            String jsonResult = objectMapper.writeValueAsString(result);
+            String jsonResult = objectMapper.writeValueAsString(cleanedResult);
             logger.log("JSON序列化成功，结果长度: " + jsonResult.length());
             return jsonResult;
         } catch (Exception e) {
@@ -328,6 +350,164 @@ public class DubboClientManager {
     }
     
     /**
+     * 创建优化的ObjectMapper，用于处理复杂类型和集合
+     */
+    private ObjectMapper createOptimizedObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        
+        // 配置序列化特性
+        mapper.enable(SerializationFeature.INDENT_OUTPUT); // 格式化输出
+        mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS); // 允许空对象
+        mapper.enable(SerializationFeature.WRITE_ENUMS_USING_TO_STRING); // 枚举使用toString
+        mapper.enable(SerializationFeature.WRITE_NULL_MAP_VALUES); // 写入null值的Map
+        
+        // 配置反序列化特性
+        mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES); // 忽略未知属性
+        mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT); // 空字符串作为null
+        
+        // 配置生成器特性
+        mapper.getFactory().enable(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN); // BigDecimal不使用科学计数法
+        
+        logger.log("ObjectMapper配置完成，支持复杂类型序列化");
+        return mapper;
+    }
+    
+    /**
+     * 清理返回结果，移除Dubbo内部对象
+     */
+    private Object cleanResult(Object result) {
+        if (result == null) {
+            return null;
+        }
+        
+        // 如果是Map，递归清理
+        if (result instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> mapResult = (Map<String, Object>) result;
+            Map<String, Object> cleanedMap = new HashMap<>();
+            
+            for (Map.Entry<String, Object> entry : mapResult.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+                
+                // 过滤掉Dubbo内部字段（包括class属性）
+                if (!isDubboInternalField(key)) {
+                    cleanedMap.put(key, cleanResult(value));
+                }
+            }
+            
+            return cleanedMap;
+        }
+        
+        // 如果是List，递归清理元素
+        if (result instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<Object> listResult = (List<Object>) result;
+            List<Object> cleanedList = new ArrayList<>();
+            
+            for (Object item : listResult) {
+                cleanedList.add(cleanResult(item));
+            }
+            
+            return cleanedList;
+        }
+        
+        // 如果是数组，递归清理元素
+        if (result.getClass().isArray()) {
+            Object[] arrayResult = (Object[]) result;
+            Object[] cleanedArray = new Object[arrayResult.length];
+            
+            for (int i = 0; i < arrayResult.length; i++) {
+                cleanedArray[i] = cleanResult(arrayResult[i]);
+            }
+            
+            return cleanedArray;
+        }
+        
+        // 其他类型直接返回
+        return result;
+    }
+    
+    /**
+     * 判断是否为Dubbo内部字段
+     */
+    private boolean isDubboInternalField(String fieldName) {
+        if (fieldName == null) {
+            return true;
+        }
+        
+        // 移除class相关字段（用户需求1：剔除返回数据中的'class'属性）
+        return fieldName.equals("class") || 
+               fieldName.startsWith("class") || 
+               fieldName.startsWith("$") ||
+               fieldName.equals("@type") ||
+               fieldName.equals("@class");
+    }
+    
+    /**
+     * 清空服务缓存
+     */
+    public void clearServiceCache() {
+        serviceCache.clear();
+        logger.log("服务缓存已清空");
+    }
+    
+    /**
+     * 检查是否为类加载器可见性错误
+     */
+    private boolean isClassLoaderVisibilityError(Exception e) {
+        if (e == null) {
+            return false;
+        }
+        
+        String message = e.getMessage();
+        if (message != null) {
+            // 检查异常消息
+            if (message.contains("is not visible from class loader") ||
+                message.contains("ClassLoader") ||
+                message.contains("NoClassDefFoundError") ||
+                message.contains("IllegalArgumentException")) {
+                return true;
+            }
+        }
+        
+        // 检查异常类型
+        if (e instanceof IllegalArgumentException ||
+            e instanceof ClassNotFoundException) {
+            return true;
+        }
+        
+        // 检查Error类型（NoClassDefFoundError继承于Error，不是Exception）
+        Throwable throwable = e;
+        if (throwable instanceof NoClassDefFoundError) {
+            return true;
+        }
+        
+        // 检查原因异常
+        Throwable cause = e.getCause();
+        if (cause != null) {
+            String causeMessage = cause.getMessage();
+            if (causeMessage != null && 
+                (causeMessage.contains("is not visible from class loader") ||
+                 causeMessage.contains("ClassLoader"))) {
+                return true;
+            }
+            
+            if (cause instanceof IllegalArgumentException ||
+                cause instanceof ClassNotFoundException) {
+                return true;
+            }
+            
+            // 检查Error类型
+            if (cause instanceof NoClassDefFoundError) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
      * 清理资源
      */
     public void cleanup() {
@@ -338,20 +518,79 @@ public class DubboClientManager {
     }
     
     /**
-     * 测试连接
+     * 测试连接（简化版，移除多层回退机制）
      */
     public boolean testConnection(String serviceInterface, String serviceUrl) {
         logger.log("开始测试连接");
         logger.log("服务接口: " + serviceInterface);
         logger.log("服务地址: " + serviceUrl);
         
+        // 确定实际的服务地址
+        String actualServiceUrl = serviceUrl;
+        if ((serviceUrl == null || serviceUrl.trim().isEmpty()) && 
+            registryAddress != null && !registryAddress.trim().isEmpty()) {
+            actualServiceUrl = registryAddress;
+            logger.log("使用注册中心地址作为服务地址: " + actualServiceUrl);
+        }
+        
+        if (actualServiceUrl == null) {
+            logger.log("测试失败：服务地址为空");
+            return false;
+        }
+        
+        // 根据地址类型选择测试方式
         try {
-            getGenericService(serviceInterface, serviceUrl);
-            logger.log("连接测试成功");
-            return true;
+            if (isRegistryAddress(actualServiceUrl)) {
+                // 注册中心模式测试
+                return testRegistryConnection(actualServiceUrl);
+            } else if (actualServiceUrl.startsWith("dubbo://")) {
+                // 直连模式测试
+                return testDirectConnection(serviceInterface, actualServiceUrl);
+            } else {
+                logger.log("不支持的服务地址格式: " + actualServiceUrl);
+                return false;
+            }
         } catch (Exception e) {
-            logger.log("连接测试失败: " + e.getMessage());
+            logger.log("测试连接失败: " + e.getMessage());
             logger.logException(e);
+            return false;
+        }
+    }
+    
+    /**
+     * 测试注册中心连接
+     */
+    private boolean testRegistryConnection(String registryUrl) {
+        logger.log("测试注册中心连接: " + registryUrl);
+        
+        try {
+            RegistryAwareDubboClient registryClient = RegistryAwareDubboClient.getInstance();
+            boolean result = registryClient.testRegistryConnection(registryUrl);
+            logger.log("注册中心连接测试" + (result ? "成功" : "失败"));
+            return result;
+        } catch (Exception e) {
+            logger.log("注册中心连接测试失败: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * 测试直连连接
+     */
+    private boolean testDirectConnection(String serviceInterface, String serviceUrl) {
+        logger.log("测试直连连接: " + serviceUrl);
+        
+        try {
+            GenericService service = getGenericService(serviceInterface, serviceUrl);
+            if (service != null) {
+                logger.log("直连连接测试成功");
+                return true;
+            } else {
+                logger.log("直连连接测试失败: 服务引用为null");
+                return false;
+            }
+        } catch (Exception e) {
+            logger.log("直连连接测试失败: " + e.getMessage());
             return false;
         }
     }

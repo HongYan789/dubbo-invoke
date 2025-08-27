@@ -16,6 +16,15 @@
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
+    
+    <!-- 添加类加载器配置解决Dubbo类可见性问题 -->
+    <idea-version since-build="233" until-build="242.*"/>
+    
+    <!-- 应用服务组件 -->
+    <applicationListeners>
+        <listener class="com.hongyan.dubboinvoke.service.DubboInvokeService" 
+                  topic="com.intellij.openapi.project.ProjectManagerListener"/>
+    </applicationListeners>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Add your extensions here -->

@@ -249,17 +249,19 @@ public class DubboInvokeDialog extends DialogWrapper {
     private JPanel createCommandPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Generated Dubbo Command"));
-
+        
+        // 问题4修复：简化为直接可编辑模式，保持双向绑定
         commandTextArea = new JBTextArea();
-        commandTextArea.setEditable(false);
+        commandTextArea.setEditable(true); // 直接设置为可编辑
         commandTextArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        commandTextArea.setBackground(UIManager.getColor("Panel.background"));
+        commandTextArea.setBackground(Color.WHITE); // 可编辑区域使用白色背景
         commandTextArea.setText(dubboCommand);
         commandTextArea.setRows(4);
         commandTextArea.setLineWrap(true);
         commandTextArea.setWrapStyleWord(true);
+        commandTextArea.setToolTipText("直接编辑命令，修改后将同步更新参数面板（双向绑定）");
         
-        // 先设置初始值，避免触发DocumentListener
+        // 设置初始值，避免触发DocumentListener
         isUpdatingFromParameters = true;
         commandTextArea.setText(dubboCommand);
         commandTextArea.selectAll();
@@ -298,7 +300,7 @@ public class DubboInvokeDialog extends DialogWrapper {
     private JPanel createResultPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Invoke Result"));
-
+        
         resultArea = new JBTextArea();
         resultArea.setEditable(false);
         resultArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -318,18 +320,28 @@ public class DubboInvokeDialog extends DialogWrapper {
         JPanel parametersPanel = new JPanel(new BorderLayout());
         parametersPanel.setBorder(BorderFactory.createTitledBorder("Parameters"));
         
-        // 创建动态参数面板
+        // 创建动态参数面板（问题3修复：确保顶端对齐）
         dynamicParametersPanel = new JPanel();
         dynamicParametersPanel.setLayout(new BoxLayout(dynamicParametersPanel, BoxLayout.Y_AXIS));
         dynamicParametersPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
+        // 设置面板的对齐方式为顶端对齐
+        dynamicParametersPanel.setAlignmentY(Component.TOP_ALIGNMENT);
+        
         // 根据方法参数生成输入控件
         generateParameterInputs();
         
+        // 使用可拖拽的滚动面板
         JBScrollPane scrollPane = new JBScrollPane(dynamicParametersPanel);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        
+        // 设置初始大小，但允许用户拖动调整
         scrollPane.setPreferredSize(new Dimension(400, 300));
+        scrollPane.setMinimumSize(new Dimension(300, 200));
+        
+        // 为滚动面板添加简洁边框，与左侧命令面板风格一致
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
         parametersPanel.add(scrollPane, BorderLayout.CENTER);
         
         // 保留原有的文本区域作为备用（隐藏）
@@ -345,6 +357,8 @@ public class DubboInvokeDialog extends DialogWrapper {
     /**
      * 根据方法参数生成输入控件
      */
+
+    
     private void generateParameterInputs() {
         // 清空现有组件
         dynamicParametersPanel.removeAll();
@@ -353,9 +367,9 @@ public class DubboInvokeDialog extends DialogWrapper {
         List<JavaMethodParser.ParameterInfo> parameters = methodInfo.getParameters();
         
         if (parameters.isEmpty()) {
-            // 无参数方法
+            // 无参数方法（问题3修复：改为顶端对齐）
             JLabel noParamsLabel = new JLabel("This method has no parameters.");
-            noParamsLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            noParamsLabel.setHorizontalAlignment(SwingConstants.LEFT); // 改为左对齐（顶端）
             dynamicParametersPanel.add(noParamsLabel);
         } else {
             // 为每个参数创建输入控件
@@ -379,38 +393,38 @@ public class DubboInvokeDialog extends DialogWrapper {
     }
     
     /**
-     * 为单个参数创建输入面板
+     * 为单个参数创建输入面板（简化布局，与左侧命令面板风格一致）
      */
     private JPanel createParameterInputPanel(JavaMethodParser.ParameterInfo param, int index) {
-        JPanel panel = new JPanel(new GridBagLayout());
+        JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(Color.LIGHT_GRAY, 1),
             BorderFactory.createEmptyBorder(8, 8, 8, 8)
         ));
         panel.setBackground(Color.WHITE);
         
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(2, 5, 2, 5);
+        // 顶部标签面板
+        JPanel labelPanel = new JPanel(new BorderLayout());
+        labelPanel.setOpaque(false);
         
-        // 参数标签
-        gbc.gridx = 0; gbc.gridy = 0; gbc.anchor = GridBagConstraints.WEST;
+        // 参数名称（左侧）
         String labelText = String.format("%d. %s", index + 1, param.getName());
         JLabel nameLabel = new JLabel(labelText);
         nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD));
-        panel.add(nameLabel, gbc);
+        labelPanel.add(nameLabel, BorderLayout.WEST);
         
-        // 参数类型
-        gbc.gridx = 1; gbc.anchor = GridBagConstraints.EAST;
+        // 参数类型（右侧）
         JLabel typeLabel = new JLabel(param.getType());
         typeLabel.setFont(typeLabel.getFont().deriveFont(Font.ITALIC));
         typeLabel.setForeground(Color.GRAY);
-        panel.add(typeLabel, gbc);
+        labelPanel.add(typeLabel, BorderLayout.EAST);
         
-        // 输入组件
-        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        panel.add(labelPanel, BorderLayout.NORTH);
+        
+        // 输入组件（中央）
         JComponent inputComponent = createInputComponentForType(param.getType());
         parameterInputs.put(param.getName(), inputComponent);
-        panel.add(inputComponent, gbc);
+        panel.add(inputComponent, BorderLayout.CENTER);
         
         return panel;
     }
@@ -453,19 +467,59 @@ public class DubboInvokeDialog extends DialogWrapper {
                 rows = 2;
             }
             
-            JBTextArea textArea = new JBTextArea(rows, 20);
+            JBTextArea textArea = new JBTextArea(rows, 30); // 增加默认列数
             textArea.setText(defaultValue);
-            textArea.setLineWrap(true);
-            textArea.setWrapStyleWord(true);
+            textArea.setLineWrap(true); // 启用自动换行
+            textArea.setWrapStyleWord(true); // 按单词换行
             
             // 设置背景色与其他组件一致
             textArea.setBackground(UIManager.getColor("Panel.background"));
             textArea.setBorder(UIManager.getBorder("TextField.border"));
             
-            // 添加文档监听器
+            // 增强自适应高度功能
+            textArea.setMinimumSize(new Dimension(300, 30)); // 增加最小宽度
+            
+            // 动态调整高度基于内容
             textArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                private void adjustHeight() {
+                    SwingUtilities.invokeLater(() -> {
+                        String text = textArea.getText();
+                        if (text != null && !text.trim().isEmpty()) {
+                            // 计算所需行数
+                            int lineCount = 1;
+                            for (char c : text.toCharArray()) {
+                                if (c == '\n') lineCount++;
+                            }
+                            
+                            // 考虑自动换行
+                            FontMetrics fm = textArea.getFontMetrics(textArea.getFont());
+                            int textWidth = fm.stringWidth(text);
+                            int componentWidth = textArea.getWidth() > 0 ? textArea.getWidth() : 300;
+                            int estimatedLines = Math.max(lineCount, (textWidth / componentWidth) + 1);
+                            
+                            // 计算适当的高度
+                            int lineHeight = fm.getHeight();
+                            int preferredHeight = Math.min(Math.max(30, estimatedLines * lineHeight + 10), 200);
+                            
+                            Dimension currentSize = textArea.getPreferredSize();
+                            if (currentSize.height != preferredHeight) {
+                                textArea.setPreferredSize(new Dimension(currentSize.width, preferredHeight));
+                                
+                                // 更新父容器布局
+                                Container parent = textArea.getParent();
+                                while (parent != null) {
+                                    parent.revalidate();
+                                    if (parent instanceof JDialog) break;
+                                    parent = parent.getParent();
+                                }
+                            }
+                        }
+                    });
+                }
+                
                 @Override
                 public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                    adjustHeight();
                     if (!isUpdatingFromParameters && !isUpdatingFromCommand) {
                         updateCommandFromParameters();
                     }
@@ -473,6 +527,7 @@ public class DubboInvokeDialog extends DialogWrapper {
                 
                 @Override
                 public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                    adjustHeight();
                     if (!isUpdatingFromParameters && !isUpdatingFromCommand) {
                         updateCommandFromParameters();
                     }
@@ -480,19 +535,32 @@ public class DubboInvokeDialog extends DialogWrapper {
                 
                 @Override
                 public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                    adjustHeight();
                     if (!isUpdatingFromParameters && !isUpdatingFromCommand) {
                         updateCommandFromParameters();
                     }
                 }
             });
             
-            // 创建可拖动的滚动面板
+            // 创建自适应的滚动面板
             JBScrollPane scrollPane = new JBScrollPane(textArea);
-            scrollPane.setPreferredSize(new Dimension(300, Math.max(25, rows * 20 + 10)));
             scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
             scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
             
-            // 简化的拖拽实现 - 使用ResizableComponent
+            // 动态设置首选尺寸，基于内容类型
+            int initialHeight;
+            if (normalizedType.contains("list") || normalizedType.contains("[]") 
+                || normalizedType.contains("array") || normalizedType.contains("object") 
+                || defaultValue.startsWith("{")) {
+                initialHeight = 80; // 复杂类型默认高度
+            } else {
+                initialHeight = 40; // 简单类型默认高度
+            }
+            
+            scrollPane.setPreferredSize(new Dimension(350, initialHeight));
+            scrollPane.setMinimumSize(new Dimension(300, 30));
+            
+            // 简化的拖拽实现
             makeResizable(scrollPane);
             
             return scrollPane;
@@ -585,35 +653,47 @@ public class DubboInvokeDialog extends DialogWrapper {
      */
     private JPanel createStatusAndButtonPanel() {
         JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         
-        // 状态面板
-        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // 状态面板 - 使用更清晰的布局
+        JPanel statusPanel = new JPanel(new BorderLayout());
         statusLabel = new JLabel("Ready");
+        statusLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
         progressBar = new JProgressBar();
         progressBar.setVisible(false);
-        statusPanel.add(statusLabel);
-        statusPanel.add(progressBar);
+        progressBar.setPreferredSize(new Dimension(200, 20));
         
-        // 按钮面板
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        statusPanel.add(statusLabel, BorderLayout.WEST);
+        statusPanel.add(progressBar, BorderLayout.CENTER);
+        
+        // 按钮面板 - 确保按钮始终可见
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        buttonPanel.setPreferredSize(new Dimension(400, 35)); // 固定高度确保不被覆盖
         
         // 添加查看日志按钮
         JButton viewLogsButton = new JButton("查看日志");
+        viewLogsButton.setPreferredSize(new Dimension(80, 28));
         viewLogsButton.addActionListener(e -> showLogFileLocation());
         
         invokeButton = new JButton("Invoke");
+        invokeButton.setPreferredSize(new Dimension(80, 28));
         invokeButton.addActionListener(e -> executeInvoke());
         
         JButton copyButton = new JButton("Copy Command");
+        copyButton.setPreferredSize(new Dimension(110, 28));
         copyButton.addActionListener(e -> copyToClipboard(commandTextArea.getText()));
         
         JButton copyResultButton = new JButton("Copy Result");
+        copyResultButton.setPreferredSize(new Dimension(100, 28));
         copyResultButton.addActionListener(e -> copyToClipboard(resultArea.getText()));
         
         buttonPanel.add(viewLogsButton);
         buttonPanel.add(invokeButton);
         buttonPanel.add(copyButton);
         buttonPanel.add(copyResultButton);
+        
+        // 确保状态栏不会与按钮重叠
+        statusPanel.setPreferredSize(new Dimension(600, 35));
         
         panel.add(statusPanel, BorderLayout.WEST);
         panel.add(buttonPanel, BorderLayout.EAST);
@@ -657,6 +737,7 @@ public class DubboInvokeDialog extends DialogWrapper {
         progressBar.setVisible(true);
         progressBar.setIndeterminate(true);
         invokeButton.setEnabled(false);
+        
         resultArea.setText("Executing Dubbo service call...");
         
         CompletableFuture.supplyAsync(() -> {
@@ -698,8 +779,8 @@ public class DubboInvokeDialog extends DialogWrapper {
                     parametersJson = "[]";
                 }
                 
-                // 注释掉cleanParametersJson调用，避免将[1L]错误转换为[1]
-                // parametersJson = cleanParametersJson(parametersJson);
+                // 清理参数JSON中的Java字面量，确保JSON解析器能正确处理
+                parametersJson = cleanParametersJson(parametersJson);
                 logger.log("参数JSON: " + parametersJson);
                 
                 logger.log("开始调用DubboInvokeService.invokeService");
@@ -718,16 +799,28 @@ public class DubboInvokeDialog extends DialogWrapper {
                     logger.log("异步执行完成时发生异常: " + throwable.getMessage());
                     logger.logException(throwable);
                     resultArea.setText("Error: " + throwable.getMessage());
-                    statusLabel.setText("Invoke failed: " + throwable.getMessage());
+                    // 使用简洁的错误状态，避免文本过长覆盖按钮
+                    String errorMsg = throwable.getMessage();
+                    if (errorMsg.length() > 50) {
+                        errorMsg = errorMsg.substring(0, 47) + "...";
+                    }
+                    statusLabel.setText("🔴 Invoke failed: " + errorMsg);
+                    statusLabel.setForeground(new Color(220, 38, 38)); // 红色
                 } else {
                     logger.log("异步执行完成，开始显示结果");
                     displayInvokeResult(result);
                     if (result.isSuccess()) {
                         logger.log("调用成功完成");
-                        statusLabel.setText("Invoke completed successfully");
+                        statusLabel.setText("🟢 Invoke completed successfully"); // 绿色小标记
+                        statusLabel.setForeground(new Color(34, 197, 94)); // 绿色
                     } else {
                         logger.log("调用失败: " + result.getErrorMessage());
-                        statusLabel.setText("Invoke failed: " + result.getErrorMessage());
+                        String errorMsg = result.getErrorMessage();
+                        if (errorMsg.length() > 50) {
+                            errorMsg = errorMsg.substring(0, 47) + "...";
+                        }
+                        statusLabel.setText("🔴 Invoke failed: " + errorMsg); // 红色小标记
+                        statusLabel.setForeground(new Color(220, 38, 38)); // 红色
                     }
                 }
             });
@@ -775,12 +868,21 @@ public class DubboInvokeDialog extends DialogWrapper {
     
     private void displayInvokeResult(DubboInvokeService.InvokeResult result) {
         if (result.isSuccess()) {
-            resultArea.setText("✅ Invoke Success\n\n" + formatJson(result.getResult()));
+            // 结果内容：只显示纯结果数据
+            resultArea.setText(formatJson(result.getResult()));
         } else {
-            resultArea.setText("❌ Invoke Failed\n\n" + 
-                "Error: " + result.getErrorMessage() + "\n\n" +
-                (result.getException() != null ? 
-                    "Exception: " + result.getException().getClass().getSimpleName() : ""));
+            // 结果内容：显示错误信息
+            StringBuilder errorContent = new StringBuilder();
+            errorContent.append("Error: ").append(result.getErrorMessage()).append("\n\n");
+            if (result.getException() != null) {
+                errorContent.append("Exception: ").append(result.getException().getClass().getSimpleName());
+                // 如果有更详细的堆栈信息，也可以显示
+                String message = result.getException().getMessage();
+                if (message != null && !message.equals(result.getErrorMessage())) {
+                    errorContent.append("\nMessage: ").append(message);
+                }
+            }
+            resultArea.setText(errorContent.toString());
         }
     }
     

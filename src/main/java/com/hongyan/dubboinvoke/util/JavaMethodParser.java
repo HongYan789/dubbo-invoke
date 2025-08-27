@@ -158,7 +158,7 @@ public class JavaMethodParser {
             case "long":
             case "java.lang.Long":
             case "Long":
-                return "1L";
+                return "1";
             case "double":
             case "java.lang.Double":
             case "Double":
@@ -166,7 +166,7 @@ public class JavaMethodParser {
             case "float":
             case "java.lang.Float":
             case "Float":
-                return "1.0f";
+                return "1.0";
             case "boolean":
             case "java.lang.Boolean":
             case "Boolean":
@@ -174,11 +174,11 @@ public class JavaMethodParser {
             case "byte":
             case "java.lang.Byte":
             case "Byte":
-                return "(byte)1";
+                return "1";
             case "short":
             case "java.lang.Short":
             case "Short":
-                return "(short)1";
+                return "1";
             case "char":
             case "java.lang.Character":
             case "Character":

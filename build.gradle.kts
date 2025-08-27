@@ -5,39 +5,31 @@ plugins {
 }
 
 group = "com.hongyan"
-version = "1.0.0"
+version = "2.0.0"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    // Dubbo dependencies for real service invocation - 降级到2.7.x版本以提高插件环境兼容性
-    implementation("org.apache.dubbo:dubbo:2.7.23")
-    implementation("org.apache.dubbo:dubbo-common:2.7.23")
-    implementation("org.apache.dubbo:dubbo-rpc-api:2.7.23")
-    implementation("org.apache.dubbo:dubbo-config-api:2.7.23")
-    implementation("org.apache.dubbo:dubbo-registry-api:2.7.23")
-    implementation("org.apache.dubbo:dubbo-registry-nacos:2.7.23")
-    implementation("org.apache.dubbo:dubbo-registry-zookeeper:2.7.23")
-    implementation("com.alibaba.nacos:nacos-client:1.4.6")
-    implementation("org.apache.curator:curator-framework:4.3.0")
-    implementation("org.apache.curator:curator-recipes:4.3.0")
-    implementation("org.apache.zookeeper:zookeeper:3.6.4")
+    // 使用简化的Dubbo实现，避免扩展机制问题
+    implementation("com.alibaba:dubbo:2.6.12")
     
-    // 添加必要的传递依赖
-    implementation("org.apache.dubbo:dubbo-serialization-hessian2:2.7.23")
-    implementation("org.apache.dubbo:dubbo-remoting-netty4:2.7.23")
-    implementation("io.netty:netty-all:4.1.77.Final")
+    // 完整的ZooKeeper客户端依赖
+    implementation("org.apache.curator:curator-framework:2.13.0")
+    implementation("org.apache.curator:curator-client:2.13.0")
+    implementation("org.apache.curator:curator-recipes:2.13.0")
+    implementation("org.apache.zookeeper:zookeeper:3.4.14") {
+        exclude(group = "org.slf4j", module = "slf4j-log4j12")
+        exclude(group = "log4j", module = "log4j")
+    }
     
-    // 可能被 PojoUtils/ReflectUtils 使用的运行时依赖
+    // 标准序列化支持（Dubbo内部使用）
+    implementation("com.alibaba:hessian-lite:3.2.13")
+    
+    // 工具类
     implementation("org.javassist:javassist:3.29.2-GA")
     implementation("org.apache.commons:commons-lang3:3.13.0")
-    implementation("org.apache.commons:commons-collections4:4.4")
-    implementation("org.objenesis:objenesis:3.3")
-    implementation("com.esotericsoftware:reflectasm:1.11.9")
-    implementation("net.bytebuddy:byte-buddy:1.14.10")
-    implementation("net.bytebuddy:byte-buddy-agent:1.14.10")
     implementation("com.alibaba.fastjson2:fastjson2:2.0.51")
     
     // JSON processing
@@ -45,6 +37,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")
     implementation("com.fasterxml.jackson.core:jackson-annotations:2.15.2")
     
+
     // Logging - 使用 IntelliJ 内置的日志系统
     compileOnly("org.slf4j:slf4j-api:1.7.36")
     
@@ -106,9 +99,57 @@ tasks {
         include("META-INF/dubbo/**")
         // 关键：包含 Dubbo 的序列化白名单/黑名单等资源
         include("security/**")
+        
+        // 添加manifest配置，确保类加载器可见性
+        manifest {
+            attributes(
+                "Implementation-Title" to project.name,
+                "Implementation-Version" to project.version,
+                "Class-Path" to configurations.runtimeClasspath.get().joinToString(" ") { it.name }
+            )
+        }
     }
     
     // 添加运行测试程序的任务
+    register<JavaExec>("runSimplifiedDubboTest") {
+        group = "verification"
+        description = "Run SimplifiedDubboTest to verify the fixed implementation"
+        classpath = sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.SimplifiedDubboTest")
+        jvmArgs = listOf(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+            "--add-opens=java.base/java.math=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        )
+    }
+    
+    register<JavaExec>("runOptimizedDubboTest") {
+        group = "verification"
+        description = "Run OptimizedDubboTest to verify all improvements"
+        classpath = sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.OptimizedDubboTest")
+        jvmArgs = listOf(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+            "--add-opens=java.base/java.math=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        )
+    }
+    
+    register<JavaExec>("runHttpFallbackTest") {
+        group = "verification"
+        description = "Run HttpFallbackTest to verify the HTTP fallback mechanism"
+        classpath = sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.HttpFallbackTest")
+        jvmArgs = listOf(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+            "--add-opens=java.base/java.math=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        )
+    }
+    
     register<JavaExec>("runSimpleJsonTest") {
         group = "application"
         description = "Run SimpleJsonTest"
@@ -187,12 +228,68 @@ tasks {
         mainClass.set("com.hongyan.dubboinvoke.TestListRowParsing")
     }
     
+    // 最终修复测试
+    register<JavaExec>("runFinalFixTest") {
+        group = "verification"
+        description = "Run final fix test to verify ZooKeeper dependencies and native Dubbo protocol improvements"
+        classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.FinalFixTest")
+        jvmArgs = listOf(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+            "--add-opens=java.base/java.math=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        )
+    }
+    
     // 直连冒烟测试（带 JDK17 --add-opens 以兼容 Hessian2 反射）
     register<JavaExec>("runDirectInvokeSmokeTest") {
         group = "verification"
         description = "Run DirectInvokeSmokeTest with JDK17 --add-opens"
         classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
         mainClass.set("com.hongyan.dubboinvoke.DirectInvokeSmokeTest")
+        jvmArgs = listOf(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+            "--add-opens=java.base/java.math=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        )
+    }
+    
+    // 详细的Dubbo调用测试
+    register<JavaExec>("runDetailedDubboTest") {
+        group = "verification"
+        description = "Run detailed Dubbo test with various parameter types"
+        classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.DetailedDubboTest")
+        jvmArgs = listOf(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+            "--add-opens=java.base/java.math=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        )
+    }
+    
+    // 修正后的Dubbo调用测试
+    register<JavaExec>("runFixedDubboTest") {
+        group = "verification"
+        description = "Run fixed Dubbo test with correct parameter types"
+        classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.FixedDubboTest")
+        jvmArgs = listOf(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+            "--add-opens=java.base/java.math=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        )
+    }
+    
+    // 最终修复验证测试
+    register<JavaExec>("runUltimateFixTest") {
+        group = "verification"
+        description = "Run ultimate fix verification test to check JSON format and multi-layer fallback mechanism"
+        classpath = sourceSets["main"].runtimeClasspath + sourceSets["test"].runtimeClasspath
+        mainClass.set("com.hongyan.dubboinvoke.UltimateFixTest")
         jvmArgs = listOf(
             "--add-opens=java.base/java.lang=ALL-UNNAMED",
             "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
